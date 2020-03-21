@@ -41,17 +41,17 @@ with tf.device('/gpu:0'):
                                input_shape=(None, None, 1))
     ])
 
-with tf.device('/gpu:0'):
+with tf.device('/gpu:1'):
     layer2 = tf.keras.Sequential([
         tf.keras.layers.Conv2D(16, [3, 3], activation='relu')
     ])
 
-with tf.device('/gpu:0'):
+with tf.device('/gpu:2'):
     layer3 = tf.keras.Sequential([
         tf.keras.layers.GlobalAveragePooling2D()
     ])
 
-with tf.device('/gpu:0'):
+with tf.device('/gpu:3'):
     layer4 = tf.keras.Sequential([
         tf.keras.layers.Dense(10)
     ])
@@ -120,24 +120,25 @@ def dist_train(epochs):
 
 
 import time
-
-t1 = time.time()
-with tf.device('/cpu:0'):
-    train(epochs=3)
-print("CPU TIME : {}".format(time.time() - t1))
+#
+# t1 = time.time()
+# with tf.device('/cpu:0'):
+#     train(epochs=3)
+# print("CPU TIME : {}".format(time.time() - t1))
 
 t1 = time.time()
 dist_train(epochs=3)
 print("GPU Time : {}".format(time.time() - t1))
 
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
+#
+# plt.plot(loss_history)
+# plt.xlabel('Batch #')
+# plt.ylabel('Loss [entropy]')
+#
+# import matplotlib.pyplot as plt
+#
+# plt.plot(dist_loss_history)
+# plt.xlabel('Batch #')
+# plt.ylabel('Dist Loss [entropy]')
 
-plt.plot(loss_history)
-plt.xlabel('Batch #')
-plt.ylabel('Loss [entropy]')
-
-import matplotlib.pyplot as plt
-
-plt.plot(dist_loss_history)
-plt.xlabel('Batch #')
-plt.ylabel('Dist Loss [entropy]')

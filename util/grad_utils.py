@@ -1,6 +1,6 @@
 import numpy as np
 from tensorflow.python.framework.ops import EagerTensor
-from util import tensor_utils as tutils
+import core.distributed as dist
 
 
 def grad_reduce(grad: list = None):
@@ -12,9 +12,7 @@ def grad_reduce(grad: list = None):
             et: EagerTensor = _et
             et_npy: np.ndarray = et.numpy()
             val = et_npy * 2
-            tensor = tutils.to_tensor(val)
+            tensor = dist.all_reduce(tensor=et, op=dist.ReduceOp.SUM)
             new_grad.append(tensor)
-            #print("Index {}, Et Type {}, Tensor Type {}".format(index, type(et), type(tensor)))
-            # print(index, et_npy.shape)
     grad.clear()
     return new_grad

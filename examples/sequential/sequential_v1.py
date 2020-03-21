@@ -14,36 +14,20 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 import tensorflow as tf
 
-import core.distributed as dist
-from util import data_utils as dutils
-from util import grad_utils as gutils
-
-dist.initialize()
-
 tf.executing_eagerly()
 
 (mnist_train_images, mnist_train_labels), ((mnist_test_images, mnist_test_labels)) = tf.keras.datasets.mnist.load_data()
 
-world_rank = dist.get_world_rank()
-world_size = dist.get_world_size()
-
-sequential_mini_batch_size = 32
-mini_batch_size = int(sequential_mini_batch_size / world_size)
-
 print(mnist_train_images.shape, mnist_train_labels.shape, mnist_test_images.shape, mnist_test_labels.shape)
 
-mnist_train_images_local = dutils.get_data_partition(mnist_train_images, world_size, world_rank)
-mnist_train_labels_local = dutils.get_data_partition(mnist_train_labels, world_size, world_rank)
+mini_batch_size = 8
 
-mnist_test_images_local = dutils.get_data_partition(mnist_test_images, world_size, world_rank)
-mnist_test_labels_local = dutils.get_data_partition(mnist_test_labels, world_size, world_rank)
-
-print(mnist_train_images_local.shape, mnist_train_labels_local.shape, mnist_test_images_local.shape,
-      mnist_test_labels_local.shape)
+mnist_train_images = mnist_train_images[0:15000]
+mnist_train_labels = mnist_train_labels[0:15000]
 
 dataset = tf.data.Dataset.from_tensor_slices(
-    (tf.cast(mnist_train_images_local[..., tf.newaxis] / 255, tf.float32),
-     tf.cast(mnist_train_labels_local, tf.int64)))
+    (tf.cast(mnist_train_images[..., tf.newaxis] / 255, tf.float32),
+     tf.cast(mnist_train_labels, tf.int64)))
 dataset = dataset.shuffle(1000).batch(mini_batch_size)
 
 # Build the model
@@ -63,13 +47,6 @@ loss_object = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
 
 loss_history = []
 
-dist_loss_history = []
-
-import time
-
-total_allreduce_time = []
-
-
 def train_step(images, labels):
     with tf.GradientTape() as tape:
         logits = mnist_model(images, training=True)
@@ -81,10 +58,6 @@ def train_step(images, labels):
 
     loss_history.append(loss_value.numpy().mean())
     grads = tape.gradient(loss_value, mnist_model.trainable_variables)
-    t1 = time.time()
-    grads = gutils.grad_reduce(grad=grads)
-    t2 = time.time()
-    total_allreduce_time.append(t2 - t1)
     optimizer.apply_gradients(zip(grads, mnist_model.trainable_variables))
 
 
@@ -92,14 +65,15 @@ def train(epochs):
     for epoch in range(epochs):
         for (batch, (images, labels)) in enumerate(dataset):
             train_step(images, labels)
-        print('Epoch {} finished, Batch {}'.format(epoch, batch))
+        print('Epoch {} finished'.format(epoch))
 
 
 import time
 
 t1 = time.time()
-train(epochs=1)
-print("CPU TIME : {}, Communication Time {}".format(time.time() - t1, sum(total_allreduce_time)/len(total_allreduce_time)))
+with tf.device('/cpu:0'):
+    train(epochs=1)
+print("CPU TIME : {}".format(time.time() - t1))
 
 # import matplotlib
 #
@@ -110,4 +84,3 @@ print("CPU TIME : {}, Communication Time {}".format(time.time() - t1, sum(total_
 # plt.xlabel('Batch #')
 # plt.ylabel('Loss [entropy]')
 # plt.show()
-dist.finalize()
