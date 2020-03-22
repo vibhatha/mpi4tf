@@ -10,12 +10,16 @@ Original file is located at
 # !pip install tensorflow-gpu==2.0.0b1
 
 # Commented out IPython magic to ensure Python compatibility.
+
 from __future__ import absolute_import, division, print_function, unicode_literals
 import os
+import numpy as np
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 
-import cProfile
 
+
+import cProfile
 
 tf.executing_eagerly()
 
@@ -63,6 +67,13 @@ dist_mnist_model = tf.keras.Sequential([
     layer4
 ])
 
+dist_model_partitions = [
+    ["layer1", tf.keras.Sequential([layer1])],
+    ["layer2", tf.keras.Sequential([layer2])],
+    ["layer3", tf.keras.Sequential([layer3])],
+    ["layer4", tf.keras.Sequential([layer4])]
+]
+
 for images, labels in dataset.take(1):
     print("Logits: ", mnist_model(images[0:1]).numpy())
 
@@ -78,6 +89,7 @@ dist_loss_history = []
 
 
 def train_step(images, labels):
+    forward_time = time.time()
     with tf.GradientTape() as tape:
         logits = mnist_model(images, training=True)
 
@@ -85,50 +97,90 @@ def train_step(images, labels):
         tf.debugging.assert_equal(logits.shape, (32, 10))
 
         loss_value = loss_object(labels, logits)
-
+    forward_time = time.time() - forward_time
     loss_history.append(loss_value.numpy().mean())
+    backward_time = time.time()
     grads = tape.gradient(loss_value, mnist_model.trainable_variables)
     optimizer.apply_gradients(zip(grads, mnist_model.trainable_variables))
+    backward_time = time.time() - backward_time
+    return forward_time, backward_time
 
 
 def dist_train_step(images, labels):
-    with tf.GradientTape() as tape:
-        logits = dist_mnist_model(images, training=True)
+    forward_time = time.time()
+    forward_meta = {}
+    backward_meta = {}
+    with tf.GradientTape(persistent=True) as tape:
+        logits = images
+        for model_id, model_info in enumerate(dist_model_partitions):
+            with tf.device("/gpu:" + str(model_id)):
+                model_name, model = model_info[0], model_info[1]
+                logits = model(logits, training=True)
+                print("Forward>>>>> {}".format([model_id, tf.test.gpu_device_name()]))
+            #forward_meta[model_id] = [model_name, str(tf.test.gpu_device_name())]
 
         # Add asserts to check the shape of the output.
         tf.debugging.assert_equal(logits.shape, (32, 10))
 
         loss_value = loss_object(labels, logits)
-
+    forward_time = time.time() - forward_time
     dist_loss_history.append(loss_value.numpy().mean())
-    grads = tape.gradient(loss_value, dist_mnist_model.trainable_variables)
-    optimizer.apply_gradients(zip(grads, dist_mnist_model.trainable_variables))
+
+    backward_time = time.time()
+    for model_id, model_info in enumerate(dist_model_partitions):
+        model_name, model = model_info[0], model_info[1]
+        #print("Backward>>>>> {} {}".format(model_id, tf.test.gpu_device_name()))
+        #backward_meta[model_id] = [model_name, tf.test.gpu_device_name()]
+        with tf.device('/gpu:' + str(model_id)):
+            print("Backward>>>>> {} {}".format(model_id, tf.test.gpu_device_name()))
+            grads = tape.gradient(loss_value, model.trainable_variables)
+            optimizer.apply_gradients(zip(grads, model.trainable_variables))
+    backward_time = time.time() - backward_time
+    return forward_time, backward_time, forward_meta, backward_meta
 
 
 def train(epochs):
     for epoch in range(epochs):
+        per_epoch_forward_time = []
+        per_epoch_backward_time = []
         for (batch, (images, labels)) in enumerate(dataset):
-            train_step(images, labels)
-        print('Epoch {} finished'.format(epoch))
+            forward_time, backward_time = train_step(images, labels)
+            per_epoch_forward_time.append(forward_time)
+            per_epoch_backward_time.append(backward_time)
+        total_fw_time = np.sum(np.array(per_epoch_forward_time))
+        total_bw_time = np.sum(np.array(per_epoch_backward_time))
+        print('Epoch {} finished, FW Time : {} s, BW Time : {} s'.format(epoch, total_fw_time, total_bw_time))
 
 
 def dist_train(epochs):
     for epoch in range(epochs):
+        per_epoch_forward_time = []
+        per_epoch_backward_time = []
+        forward_meta = None
+        backward_meta = None
         for (batch, (images, labels)) in enumerate(dataset):
-            dist_train_step(images, labels)
-        print('Epoch {} finished'.format(epoch))
+            forward_time, backward_time, forward_meta, backward_meta = dist_train_step(images, labels)
+            # print("FW Time {}, BW Time {}".format(forward_time, backward_time))
+            per_epoch_forward_time.append(forward_time)
+            per_epoch_backward_time.append(backward_time)
+        total_fw_time = np.sum(np.array(per_epoch_forward_time))
+        total_bw_time = np.sum(np.array(per_epoch_backward_time))
+        print('Epoch {} finished, FW Time : {} s, BW Time : {} s'.format(epoch, total_fw_time, total_bw_time))
+        # for id in range(len(dist_model_partitions)):
+        #     print(id, forward_meta[id], backward_meta[id])
 
 
 import time
+
 #
 # t1 = time.time()
-# with tf.device('/cpu:0'):
+# with tf.device('/gpu:0'):
 #     train(epochs=3)
-# print("CPU TIME : {}".format(time.time() - t1))
+# print("Single GPU TIME : {}".format(time.time() - t1))
 
 t1 = time.time()
 dist_train(epochs=3)
-print("GPU Time : {}".format(time.time() - t1))
+print("4 GPU Time : {}".format(time.time() - t1))
 
 # import matplotlib.pyplot as plt
 #
@@ -141,4 +193,3 @@ print("GPU Time : {}".format(time.time() - t1))
 # plt.plot(dist_loss_history)
 # plt.xlabel('Batch #')
 # plt.ylabel('Dist Loss [entropy]')
-
