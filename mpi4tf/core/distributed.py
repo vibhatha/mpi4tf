@@ -4,7 +4,7 @@ mpi4py.rc(initialize=False, finalize=False)
 from mpi4py import MPI
 from enum import Enum
 import numpy as np
-from util import tensor_utils as tutils
+from mpi4tf.util import tensor_utils as tutils
 
 
 class ReduceOp(Enum):

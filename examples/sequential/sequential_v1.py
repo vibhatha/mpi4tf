@@ -1,18 +1,13 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 
 import os
-
-from silence_tensorflow import silence_tensorflow
-
-silence_tensorflow()
 import warnings
-
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore", category=FutureWarning)
-
 import tensorflow as tf
 import time
 import logging
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=FutureWarning)
 
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
 

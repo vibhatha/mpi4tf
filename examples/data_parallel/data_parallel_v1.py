@@ -1,25 +1,19 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 import os
-
-from silence_tensorflow import silence_tensorflow
-
-silence_tensorflow()
+import time
 import warnings
+import tensorflow as tf
+import logging
+from mpi4tf.core import distributed as dist
+from mpi4tf.util import data_utils as dutils, grad_utils as gutils
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=FutureWarning)
-
-import tensorflow as tf
-
-import logging
 
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
-import core.distributed as dist
-from util import data_utils as dutils
-from util import grad_utils as gutils
 
 stats_file = "tf_stats_data_parallel_mnist.csv"
 
@@ -74,8 +68,6 @@ loss_history = []
 
 dist_loss_history = []
 
-import time
-
 total_allreduce_time = []
 forward_time = []
 backward_time = []
@@ -118,9 +110,6 @@ def train(epochs) -> int:
             local_train_steps += 1
         print('Epoch {} finished, Batch {}'.format(epoch, batch))
     return local_train_steps
-
-
-import time
 
 
 epochs = 1

@@ -1,4 +1,4 @@
-import core.distributed as dist
+import mpi4tf.core.distributed as dist
 import tensorflow as tf
 
 tf.executing_eagerly()

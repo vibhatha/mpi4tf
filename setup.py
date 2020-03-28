@@ -2,15 +2,15 @@
 #from distutils.core import setup
 from setuptools import setup
 setup(
-    name='tfpipegrad',
+    name='mpi4tf',
     packages=[],
     version='0.0.1',
-    description='Tensorflow Based Pipeline Training with Autograd Optimization',
+    description='Tensorflow Based Distributed Training with MPI',
     author='Vibhatha Abeykoon',
     license='Apache License 2.0',
     author_email='vibhatha@gmail.com',
-    url='https://github.com/vibhatha/tfpipegrad',
-    keywords=['tensorflow', 'pipeline', 'parallelism', 'autograd' ],
+    url='https://github.com/vibhatha/mpi4tf',
+    keywords=['tensorflow', 'parallelism', 'mpi' ],
     python_requires='>=3.6',
     classifiers=[
         'Intended Audience :: Developers',

@@ -1,6 +1,6 @@
 import numpy as np
 from tensorflow.python.framework.ops import EagerTensor
-import core.distributed as dist
+import mpi4tf.core.distributed as dist
 
 
 def grad_reduce(grad: list = None):
