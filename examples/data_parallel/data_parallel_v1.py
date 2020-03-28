@@ -11,14 +11,33 @@ Original file is located at
 
 # Commented out IPython magic to ensure Python compatibility.
 from __future__ import absolute_import, division, print_function, unicode_literals
+import os
+
+from silence_tensorflow import silence_tensorflow
+
+silence_tensorflow()
+import warnings
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=FutureWarning)
 
 import tensorflow as tf
+
+import logging
+
+logging.getLogger('tensorflow').setLevel(logging.FATAL)
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import core.distributed as dist
 from util import data_utils as dutils
 from util import grad_utils as gutils
 
+stats_file = "tf_stats_data_parallel_mnist.csv"
+
 dist.initialize()
+
+comm = dist.get_comm()
 
 tf.executing_eagerly()
 
@@ -27,8 +46,10 @@ tf.executing_eagerly()
 world_rank = dist.get_world_rank()
 world_size = dist.get_world_size()
 
-sequential_mini_batch_size = 32
+sequential_mini_batch_size = 600
 mini_batch_size = int(sequential_mini_batch_size / world_size)
+# picking constant mini-batch size
+mini_batch_size = 25
 
 print(mnist_train_images.shape, mnist_train_labels.shape, mnist_test_images.shape, mnist_test_labels.shape)
 
@@ -99,15 +120,15 @@ import time
 
 t1 = time.time()
 train(epochs=1)
-print("CPU TIME : {}, Communication Time {}".format(time.time() - t1, sum(total_allreduce_time)/len(total_allreduce_time)))
 
-# import matplotlib
-#
-# matplotlib.use('TkAgg')
-# import matplotlib.pyplot as plt
-#
-# plt.plot(loss_history)
-# plt.xlabel('Batch #')
-# plt.ylabel('Loss [entropy]')
-# plt.show()
+training_time = time.time() - t1
+communication_time = sum(total_allreduce_time) / len(total_allreduce_time)
+print("CPU TIME : {}, Communication Time {}".format(training_time, communication_time))
+
+world_rank = dist.get_world_rank(comm)
+if world_rank == 0:
+    with open(stats_file, "+a") as fp:
+        fp.write("{:d},{:.6f},{:.6f},{:.6f}\n".format(dist.get_world_size(comm), training_time,
+                                                      training_time - communication_time, communication_time))
+
 dist.finalize()
