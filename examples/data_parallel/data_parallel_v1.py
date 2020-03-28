@@ -89,46 +89,83 @@ dist_loss_history = []
 import time
 
 total_allreduce_time = []
+forward_time = []
+backward_time = []
+loss_time = []
+grad_update_time = []
 
 
 def train_step(images, labels):
     with tf.GradientTape() as tape:
+        t1 = time.time()
         logits = mnist_model(images, training=True)
-
+        forward_time.append(time.time() - t1)
         # Add asserts to check the shape of the output.
-        tf.debugging.assert_equal(logits.shape, (mini_batch_size, 10))
-
+        # tf.debugging.assert_equal(logits.shape, (mini_batch_size, 10))
+        t1 = time.time()
         loss_value = loss_object(labels, logits)
+        loss_time.append(time.time() - t1)
 
     loss_history.append(loss_value.numpy().mean())
+    t1 = time.time()
     grads = tape.gradient(loss_value, mnist_model.trainable_variables)
+    backward_time.append(time.time() - t1)
     t1 = time.time()
     grads = gutils.grad_reduce(grad=grads)
     t2 = time.time()
     total_allreduce_time.append(t2 - t1)
+    t1 = time.time()
     optimizer.apply_gradients(zip(grads, mnist_model.trainable_variables))
+    grad_update_time.append(time.time() - t1)
 
 
-def train(epochs):
+train_step_calls: int = 0
+
+
+def train(epochs) -> int:
+    local_train_steps: int = 0
     for epoch in range(epochs):
         for (batch, (images, labels)) in enumerate(dataset):
             train_step(images, labels)
+            local_train_steps += 1
         print('Epoch {} finished, Batch {}'.format(epoch, batch))
+    return local_train_steps
 
 
 import time
 
-t1 = time.time()
-train(epochs=1)
 
-training_time = time.time() - t1
-communication_time = sum(total_allreduce_time) / len(total_allreduce_time)
+epochs = 1
+t1 = time.time()
+train_step_calls = train(epochs=epochs)
+
+training_time = (time.time() - t1) / epochs
+
+train_step_calls = int(train_step_calls / epochs)
+
+sample_size = int(mini_batch_size * train_step_calls)
+communication_time = sum(total_allreduce_time) / epochs
+forward_time_s = sum(forward_time) / epochs
+backward_time_s = sum(backward_time) / epochs
+loss_time_s = sum(loss_time) / epochs
+grad_update_time_s = sum(grad_update_time) / epochs
+
 print("CPU TIME : {}, Communication Time {}".format(training_time, communication_time))
 
 world_rank = dist.get_world_rank(comm)
 if world_rank == 0:
     with open(stats_file, "+a") as fp:
-        fp.write("{:d},{:.6f},{:.6f},{:.6f}\n".format(dist.get_world_size(comm), training_time,
-                                                      training_time - communication_time, communication_time))
+        fp.write(
+            "{:d},{:d},{:d},{:d},{:.6f},{:.6f},{:.6f},{:.6f},{:.6f},{:.6f},{:.6f}\n".format(dist.get_world_size(comm),
+                                                                                            sample_size,
+                                                                                            mini_batch_size,
+                                                                                            train_step_calls,
+                                                                                            training_time,
+                                                                                            training_time - communication_time,
+                                                                                            communication_time,
+                                                                                            forward_time_s,
+                                                                                            backward_time_s,
+                                                                                            loss_time_s,
+                                                                                            grad_update_time_s))
 
 dist.finalize()
