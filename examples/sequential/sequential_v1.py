@@ -1,4 +1,5 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
+
 import os
 
 from silence_tensorflow import silence_tensorflow
@@ -16,10 +17,6 @@ import logging
 logging.getLogger('tensorflow').setLevel(logging.FATAL)
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-
-import core.distributed as dist
-from util import data_utils as dutils
-from util import grad_utils as gutils
 
 stats_file = "tf_stats_data_parallel_mnist.csv"
 
